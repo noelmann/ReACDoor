@@ -7,7 +7,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_executable(ReACDoor main.cpp
     lodepng.h
-    lodepng.cpp)
+    lodepng.cpp
+    base64.h
+    base64.cpp)
 
 include(GNUInstallDirs)
 include(FetchContent)

