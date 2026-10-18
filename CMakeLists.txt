@@ -9,14 +9,13 @@ add_executable(ReACDoor main.cpp
     lodepng.h
     lodepng.cpp
     base64.h
-    base64.cpp)
+    base64.cpp
+    HTTPRequest.hpp)
 
 include(GNUInstallDirs)
 include(FetchContent)
-FetchContent_Declare(cpr GIT_REPOSITORY https://github.com/libcpr/cpr.git
-                         GIT_TAG b2d95f260f1f4472e90fb69f66e362ba41c83946)
-FetchContent_MakeAvailable(cpr)
-target_link_libraries(ReACDoor PRIVATE cpr::cpr)
+target_link_libraries(ReACDoor PRIVATE
+    ws2_32)
 
 install(TARGETS ReACDoor
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}

