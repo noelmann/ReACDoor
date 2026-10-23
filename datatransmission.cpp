@@ -9,10 +9,10 @@ DataTransmission::DataTransmission() : transmitter(&transmitData,this)
 }
 
 
-void DataTransmission::Enqueue(std::string message)
+void DataTransmission::Enqueue(int typeID, std::string message)
 {
     std::unique_lock<std::mutex> lock(messagesMutex);
-    messages.push_back(message);
+    messages.push_back(std::pair<int,std::string>(typeID,message));
 }
 
 void DataTransmission::transmitData()
@@ -29,10 +29,12 @@ void DataTransmission::transmitData()
         try
         {
             http::Request request{"http://echo.free.beeceptor.com"};
-            const std::string body = "|||"+messages.front();
+            const std::string type = std::to_string(messages.front().first);
+            const std::string body = "|||"+messages.front().second;
+
 
             const auto response = request.send("POST", body, {
-                                                               {"Content-Type", "application/x-www-form-urlencoded"},{"messageType","secretSauce"}
+                                                               {"Content-Type", "application/x-www-form-urlencoded"},{"typeID", type}
                                                              });
 
             std::string result(response.body.begin(), response.body.end());
