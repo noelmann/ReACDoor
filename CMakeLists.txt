@@ -10,7 +10,9 @@ add_executable(ReACDoor main.cpp
     lodepng.cpp
     base64.h
     base64.cpp
-    HTTPRequest.hpp)
+    HTTPRequest.hpp
+    datatransmission.h datatransmission.cpp
+    cipher.h cipher.cpp)
 
 include(GNUInstallDirs)
 include(FetchContent)
