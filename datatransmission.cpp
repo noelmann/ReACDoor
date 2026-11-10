@@ -49,8 +49,12 @@ void DataTransmission::transmitData()
             std::string result(response.body.begin(), response.body.end());
             //std::cout << result << '\n';
 
-            std::unique_lock<std::mutex> lock(messagesMutex);
-            messages.pop_front();
+            if(result == transmissionConfirmation)
+            {
+                std::unique_lock<std::mutex> lock(messagesMutex);
+                messages.pop_front();
+            }
+
         }
         catch (const std::exception& e)
         {

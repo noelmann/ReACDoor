@@ -12,6 +12,7 @@ class DataTransmission
 {
 private:
     std::string key = "secretkey";
+    std::string transmissionConfirmation = "received";
     std::thread transmitter;
     std::deque<std::pair<int,std::string>> messages;
     std::mutex messagesMutex;
