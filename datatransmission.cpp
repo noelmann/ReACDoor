@@ -10,7 +10,7 @@ DataTransmission::DataTransmission() : transmitter(&transmitData,this)
 
 std::string DataTransmission::prepareMessageForTransmission(std::string message)
 {
-    return base64_encode(Cipher::XOR(message,"secretkey"));
+    return base64_encode(Cipher::XOR(message,key));
 
 }
 
@@ -25,7 +25,7 @@ void DataTransmission::transmitData()
 {
     for(;;)
     {
-        Sleep(100);
+        Sleep(10);
     if(messages.empty())
     {
         continue;
@@ -36,6 +36,8 @@ void DataTransmission::transmitData()
         {
             //http::Request request{"http://echo.free.beeceptor.com"};
             http::Request request{"http://reacdoormaster:8080"};
+            //http::Request request{"http://raspberrypi:8080"};
+            //http::Request request{"http://localhost:8080"};
             const std::string type = std::to_string(messages.front().first);
             const std::string body = messages.front().second;
 
