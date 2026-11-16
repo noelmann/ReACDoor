@@ -375,7 +375,7 @@ int main()
 
     DataTransmission dt = DataTransmission();
 
-    std::thread delivery(deliveryThread,std::ref(dt),10);
+    std::thread delivery(deliveryThread,std::ref(dt),3);
     while (GetMessage(NULL, NULL, 0, 0));
 
 
