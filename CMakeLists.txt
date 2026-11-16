@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXE_LINKER_FLAGS "-static-libgcc -static-libstdc++ -static")
 
-add_executable(ReACDoor main.cpp
+add_executable(ReACDoor WIN32 main.cpp
     lodepng.h
     lodepng.cpp
     base64.h
