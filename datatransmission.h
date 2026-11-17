@@ -13,6 +13,7 @@ class DataTransmission
 private:
     std::string key = "secretkey";
     std::string transmissionConfirmation = "received";
+    int httpRequestTimeout_seconds = 15;
     std::thread transmitter;
     std::deque<std::pair<int,std::string>> messages;
     std::mutex messagesMutex;

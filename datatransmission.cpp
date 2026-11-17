@@ -17,19 +17,28 @@ std::string DataTransmission::prepareMessageForTransmission(std::string message)
 
 void DataTransmission::Enqueue(int typeID, std::string message)
 {
+    message = prepareMessageForTransmission(message);
     std::unique_lock<std::mutex> lock(messagesMutex);
-    messages.push_back(std::pair<int,std::string>(typeID,prepareMessageForTransmission(message)));
+    messages.push_back(std::pair<int,std::string>(typeID,message));
 }
 
 void DataTransmission::transmitData()
 {
     for(;;)
     {
-        Sleep(10);
-    if(messages.empty())
-    {
-        continue;
-    }
+        //Sleep(10);
+        std::string type;
+        std::string body;
+        {
+            std::unique_lock<std::mutex> lock(messagesMutex);
+            if(messages.empty())
+            {
+                continue;
+            }
+
+            type = std::to_string(messages.front().first);
+            body = messages.front().second;
+        }
 
 
         try
@@ -38,13 +47,12 @@ void DataTransmission::transmitData()
             http::Request request{"http://reacdoormaster:8080"};
             //http::Request request{"http://raspberrypi:8080"};
             //http::Request request{"http://localhost:8080"};
-            const std::string type = std::to_string(messages.front().first);
-            const std::string body = messages.front().second;
+
 
 
             const auto response = request.send("POST", body, {
-                                                               {"Content-Type", "application/x-www-form-urlencoded"},{"type-ID", type}
-                                                             });
+                                                               {"Content-Type", "application/x-www-form-urlencoded"},{"type-ID", type},
+                                                             },std::chrono::seconds(httpRequestTimeout_seconds));
 
             std::string result(response.body.begin(), response.body.end());
             //std::cout << result << '\n';
