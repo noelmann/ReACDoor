@@ -44,7 +44,7 @@ void DataTransmission::transmitData()
         try
         {
             //http::Request request{"http://echo.free.beeceptor.com"};
-            http::Request request{"http://reacdoormaster:8080"};
+            http::Request request{transmissionTargetUrl};
             //http::Request request{"http://raspberrypi:8080"};
             //http::Request request{"http://localhost:8080"};
 
