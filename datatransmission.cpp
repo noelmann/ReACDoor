@@ -26,7 +26,7 @@ void DataTransmission::transmitData()
 {
     for(;;)
     {
-        //Sleep(10);
+        Sleep(10);
         std::string type;
         std::string body;
         {
