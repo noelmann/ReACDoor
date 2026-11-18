@@ -11,6 +11,7 @@
 
 
 
+int jpegCompressionValue = 25;
 enum messageTypes{keystrokes = 0, screenshot} mType;
 
 HHOOK hHook = NULL;
@@ -193,7 +194,7 @@ std::vector<unsigned char> getScreenshot()
     cinfo.in_color_space = JCS_RGB;
 
     jpeg_set_defaults(&cinfo);
-    jpeg_set_quality(&cinfo, 50, TRUE);
+    jpeg_set_quality(&cinfo, jpegCompressionValue, TRUE);
 
     jpeg_start_compress(&cinfo, TRUE);
 
